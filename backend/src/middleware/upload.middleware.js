@@ -1,9 +1,7 @@
 const multer = require("multer");
 
-const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024); // 5MB default
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES || 5 * 1024 * 1024); 
 
-// Memory storage: file lives only in RAM for the duration of the request.
-// Nothing touches disk, keeping the backend fully stateless.
 const storage = multer.memoryStorage();
 
 function fileFilter(req, file, cb) {

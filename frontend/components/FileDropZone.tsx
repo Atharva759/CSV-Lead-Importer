@@ -7,7 +7,7 @@ interface FileDropzoneProps {
   onFileAccepted: (file: File) => void;
 }
 
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5MB, matches backend limit
+const MAX_SIZE_BYTES = 5 * 1024 * 1024; 
 
 export default function FileDropzone({ onFileAccepted }: FileDropzoneProps) {
   const [error, setError] = useState<string | null>(null);

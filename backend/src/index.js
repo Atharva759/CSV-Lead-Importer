@@ -17,7 +17,6 @@ app.get("/health", (req, res) => {
 
 app.use("/api/import", importRoutes);
 
-// Centralized error handler (multer errors, JSON parse errors, etc. land here)
 app.use((err, req, res, next) => {
   console.error(err);
   const status = err.status || 400;

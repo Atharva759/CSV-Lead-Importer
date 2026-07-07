@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit real API keys)
+.env
+.env.local
+.env.*.local
+
+# Next.js build output
+.next/
+frontend/out/
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+

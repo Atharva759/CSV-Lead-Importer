@@ -21,6 +21,20 @@ body {
   background-color: var(--color-ink);
   color: var(--color-paper);
   font-family: var(--font-body);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+[data-theme="light"] {
+  --color-ink: #f1f2f4;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f5f6f8;
+  --color-line: #dde1e6;
+  --color-paper: #14181f;
+  --color-muted: #5b6472;
+  --color-accent: #b9740f;
+  --color-accent-dim: #8a5809;
+  --color-success: #2f8f5f;
+  --color-danger: #c94632;
 }
 
 ::selection {
@@ -28,7 +42,6 @@ body {
   color: var(--color-ink);
 }
 
-/* Scrollbar styling for the data tables (horizontal + vertical scroll spec requirement) */
 .data-scroll::-webkit-scrollbar {
   height: 10px;
   width: 10px;

@@ -5,9 +5,10 @@ import StepIndicator from "@/components/StepIndicator";
 import FileDropzone from "@/components/FileDropZone";
 import CsvPreviewTable from "@/components/CsvPreviewTable";
 import ResultsTable from "@/components/ResultsTable";
+import ThemeToggle from "@/components/ThemeToggle";
 import { parseCsvFile, type ParsedCsv } from "@/lib/csv";
-import { importCsvFile } from "@/lib/api";
-import type { ImportApiResponse, ImportStep } from "@/lib/types";
+import { importCsvFile, retryFailedRows } from "@/lib/api";
+import type { ImportApiResponse, ImportProgressEvent, ImportStep } from "@/lib/types";
 
 export default function Home() {
   const [step, setStep] = useState<ImportStep>("upload");
@@ -16,6 +17,7 @@ export default function Home() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportApiResponse | null>(null);
+  const [progress, setProgress] = useState<ImportProgressEvent | null>(null);
 
   async function handleFileAccepted(newFile: File) {
     setParseError(null);
@@ -41,9 +43,10 @@ export default function Home() {
   async function handleConfirm() {
     if (!file) return;
     setApiError(null);
+    setProgress(null);
     setStep("processing");
     try {
-      const response = await importCsvFile(file);
+      const response = await importCsvFile(file, setProgress);
       setResult(response);
       setStep("results");
     } catch (err) {
@@ -56,26 +59,58 @@ export default function Home() {
     }
   }
 
+  async function handleRetryFailed(rows: Record<string, string>[]) {
+    setApiError(null);
+    setProgress(null);
+    setStep("processing");
+    try {
+      const retryResult = await retryFailedRows(rows, setProgress);
+      
+      setResult((prev) => {
+        if (!prev) return retryResult;
+        const retriedRowSet = new Set(rows.map((r) => JSON.stringify(r)));
+        const remainingSkipped = prev.skipped.filter(
+          (s) => !retriedRowSet.has(JSON.stringify(s.row))
+        );
+        return {
+          ...prev,
+          imported: [...prev.imported, ...retryResult.imported],
+          skipped: [...remainingSkipped, ...retryResult.skipped],
+          totalImported: prev.imported.length + retryResult.imported.length,
+          totalSkipped: remainingSkipped.length + retryResult.skipped.length,
+          batchErrors: retryResult.batchErrors,
+        };
+      });
+      setStep("results");
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Retry failed. Please try again.");
+      setStep("results");
+    }
+  }
+
   return (
     <main className="min-h-screen flex flex-col items-center px-4 py-10 sm:py-16">
       <div className="w-full max-w-4xl flex flex-col gap-8">
-        <header className="flex flex-col gap-1">
-          <span
-            className="font-mono text-xs uppercase tracking-widest"
-            style={{ color: "var(--color-accent)" }}
-          >
-            GrowEasy / Lead Import Terminal
-          </span>
-          <h1
-            className="text-2xl sm:text-3xl font-semibold"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            CSV → CRM, mapped by AI
-          </h1>
-          <p className="text-sm" style={{ color: "var(--color-muted)" }}>
-            Upload any lead export. We&apos;ll detect the fields and map them into GrowEasy
-            format — no fixed column names required.
-          </p>
+        <header className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <span
+              className="font-mono text-xs uppercase tracking-widest"
+              style={{ color: "var(--color-accent)" }}
+            >
+              Lead Import Terminal
+            </span>
+            <h1
+              className="text-2xl sm:text-3xl font-semibold"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              CSV → CRM, mapped by AI
+            </h1>
+            <p className="text-sm" style={{ color: "var(--color-muted)" }}>
+              Upload any lead export. We&apos;ll detect the fields and map them into 
+              format  no fixed column names required.
+            </p>
+          </div>
+          <ThemeToggle />
         </header>
 
         <StepIndicator current={step} />
@@ -116,14 +151,14 @@ export default function Home() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleStartOver}
-                    className="text-sm px-4 py-2 rounded-lg border"
+                    className="text-sm px-4 py-2 rounded-lg border cursor-pointer"
                     style={{ borderColor: "var(--color-line)", color: "var(--color-muted)" }}
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleConfirm}
-                    className="text-sm px-4 py-2 rounded-lg font-medium"
+                    className="text-sm px-4 py-2 rounded-lg font-medium cursor-pointer"
                     style={{ backgroundColor: "var(--color-accent)", color: "var(--color-ink)" }}
                   >
                     Confirm Import
@@ -135,7 +170,7 @@ export default function Home() {
           )}
 
           {step === "processing" && (
-            <div className="flex flex-col items-center gap-4 py-10">
+            <div className="flex flex-col items-center gap-4 py-10 w-full">
               <div
                 className="w-8 h-8 rounded-full border-2 animate-spin"
                 style={{
@@ -143,14 +178,51 @@ export default function Home() {
                   borderTopColor: "var(--color-accent)",
                 }}
               />
-              <p className="font-mono text-sm" style={{ color: "var(--color-muted)" }}>
-                Mapping fields with AI — this can take a moment for larger files…
-              </p>
+              {progress ? (
+                <div className="w-full max-w-sm flex flex-col gap-2">
+                  <div
+                    className="w-full h-2 rounded-full overflow-hidden"
+                    style={{ backgroundColor: "var(--color-line)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.round(
+                          (progress.cumulativeRows / progress.totalRows) * 100
+                        )}%`,
+                        backgroundColor: "var(--color-accent)",
+                      }}
+                    />
+                  </div>
+                  <p className="font-mono text-xs text-center" style={{ color: "var(--color-muted)" }}>
+                    Batch {progress.batchIndex + 1}/{progress.totalBatches} · {progress.cumulativeRows}/
+                    {progress.totalRows} rows mapped
+                  </p>
+                </div>
+              ) : (
+                <p className="font-mono text-sm" style={{ color: "var(--color-muted)" }}>
+                  Mapping fields with AI this can take a moment for larger files…
+                </p>
+              )}
             </div>
           )}
 
           {step === "results" && result && (
-            <ResultsTable result={result} onStartOver={handleStartOver} />
+            <>
+              {apiError && (
+                <div
+                  className="text-sm rounded-lg border px-4 py-3"
+                  style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
+                >
+                  {apiError}
+                </div>
+              )}
+              <ResultsTable
+                result={result}
+                onStartOver={handleStartOver}
+                onRetryFailed={handleRetryFailed}
+              />
+            </>
           )}
         </div>
       </div>

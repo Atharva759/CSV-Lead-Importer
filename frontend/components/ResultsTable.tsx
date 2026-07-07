@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import CsvPreviewTable from "./CsvPreviewTable";
-import { CRM_FIELD_KEYS, type ImportApiResponse } from "@/lib/types";
+import { CRM_FIELD_KEYS, isRetryableSkip, type ImportApiResponse } from "@/lib/types";
 
 interface ResultsTableProps {
   result: ImportApiResponse;
   onStartOver: () => void;
+  onRetryFailed: (rows: Record<string, string>[]) => void;
 }
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
@@ -25,8 +26,9 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
-export default function ResultsTable({ result, onStartOver }: ResultsTableProps) {
+export default function ResultsTable({ result, onStartOver, onRetryFailed }: ResultsTableProps) {
   const [tab, setTab] = useState<"imported" | "skipped">("imported");
+  const retryableRows = result.skipped.filter(isRetryableSkip).map((s) => s.row);
 
   // Build a headers/rows shape for the skipped table: original raw columns + a "reason" column.
   const skippedHeaders = Array.from(
@@ -47,18 +49,29 @@ export default function ResultsTable({ result, onStartOver }: ResultsTableProps)
 
       {result.batchErrors.length > 0 && (
         <div
-          className="text-sm rounded-lg border px-4 py-3"
+          className="text-sm rounded-lg border px-4 py-3 flex flex-wrap items-center justify-between gap-3"
           style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
         >
-          {result.batchErrors.length} batch(es) failed during AI extraction and were skipped.
-          See the Skipped tab for details.
+          <span>
+            {result.batchErrors.length} batch(es) failed during AI extraction and were skipped
+            ({retryableRows.length} row(s) affected).
+          </span>
+          {retryableRows.length > 0 && (
+            <button
+              onClick={() => onRetryFailed(retryableRows)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium shrink-0 cursor-pointer" 
+              style={{ backgroundColor: "var(--color-danger)", color: "var(--color-ink)" }}
+            >
+              Retry Failed ({retryableRows.length})
+            </button>
+          )}
         </div>
       )}
 
       <div className="flex gap-2">
         <button
           onClick={() => setTab("imported")}
-          className="text-sm px-4 py-2 rounded-lg font-medium border"
+          className="text-sm px-4 py-2 rounded-lg font-medium border cursor-pointer"
           style={{
             backgroundColor: tab === "imported" ? "var(--color-accent)" : "transparent",
             color: tab === "imported" ? "var(--color-ink)" : "var(--color-muted)",
@@ -69,7 +82,7 @@ export default function ResultsTable({ result, onStartOver }: ResultsTableProps)
         </button>
         <button
           onClick={() => setTab("skipped")}
-          className="text-sm px-4 py-2 rounded-lg font-medium border"
+          className="text-sm px-4 py-2 rounded-lg font-medium border cursor-pointer"
           style={{
             backgroundColor: tab === "skipped" ? "var(--color-accent)" : "transparent",
             color: tab === "skipped" ? "var(--color-ink)" : "var(--color-muted)",
@@ -90,7 +103,7 @@ export default function ResultsTable({ result, onStartOver }: ResultsTableProps)
       <div>
         <button
           onClick={onStartOver}
-          className="text-sm px-4 py-2 rounded-lg border"
+          className="text-sm px-4 py-2 rounded-lg border cursor-pointer"
           style={{ borderColor: "var(--color-line)", color: "var(--color-muted)" }}
         >
           Import another CSV

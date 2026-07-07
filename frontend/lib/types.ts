@@ -35,7 +35,6 @@ export const DATA_SOURCE_VALUES = [
   "sarjapur_plots",
 ] as const;
 
-/** A raw, un-mapped row straight out of the uploaded CSV (preview stage). */
 export type RawCsvRow = Record<string, string>;
 
 export interface SkippedRecord {
@@ -53,9 +52,27 @@ export interface ImportApiResponse {
   batchErrors: { batchIndex: number; size: number; error: string }[];
 }
 
+export interface ImportProgressEvent {
+  type: "progress";
+  batchIndex: number;
+  totalBatches: number;
+  batchSize: number;
+  batchImported: number;
+  batchSkipped: number;
+  batchFailed: boolean;
+  batchErrorMessage: string | null;
+  cumulativeImported: number;
+  cumulativeSkipped: number;
+  cumulativeRows: number;
+  totalRows: number;
+}
+
+export function isRetryableSkip(skip: SkippedRecord): boolean {
+  return skip.reason.startsWith("AI extraction failed");
+}
+
 export interface ImportApiError {
   error: string;
 }
 
-/** Frontend step machine for the 4-step flow described in the assignment. */
 export type ImportStep = "upload" | "preview" | "processing" | "results";

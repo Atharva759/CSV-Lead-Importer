@@ -118,9 +118,8 @@ async function extractBatchMock(rows) {
   return rows.map(mockMapRow);
 }
 
-// ---------------------------------------------------------------------------
 // ANTHROPIC provider
-// ---------------------------------------------------------------------------
+
 async function extractBatchAnthropic(rows) {
   const { system, user } = buildPrompt(rows);
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -151,9 +150,8 @@ async function extractBatchAnthropic(rows) {
   return parseModelJsonArray(text);
 }
 
-// ---------------------------------------------------------------------------
+
 // OPENAI provider
-// ---------------------------------------------------------------------------
 async function extractBatchOpenAI(rows) {
   const { system, user } = buildPrompt(rows);
   const apiKey = process.env.OPENAI_API_KEY;
@@ -185,9 +183,7 @@ async function extractBatchOpenAI(rows) {
   return parseModelJsonArray(text);
 }
 
-// ---------------------------------------------------------------------------
 // GEMINI provider
-// ---------------------------------------------------------------------------
 async function extractBatchGemini(rows) {
   const { system, user } = buildPrompt(rows);
   const apiKey = process.env.GEMINI_API_KEY;
@@ -214,9 +210,9 @@ async function extractBatchGemini(rows) {
   return parseModelJsonArray(text);
 }
 
-// ---------------------------------------------------------------------------
+
 // Public interface — the only function the rest of the app should call.
-// ---------------------------------------------------------------------------
+
 async function extractBatch(rows) {
   const provider = (process.env.AI_PROVIDER || "mock").toLowerCase();
 

@@ -1,12 +1,42 @@
 const { parseCsvBuffer } = require("../service/csvParser.service");
 const { processRows } = require("../service/batchProcessor");
 
-/**
- * POST /api/import
- * Expects multipart/form-data with a "file" field (the CSV).
- * This is only ever called AFTER the user confirms the preview on the frontend —
- * no AI work happens before this point.
- */
+
+function writeEvent(res, event) {
+  res.write(`${JSON.stringify(event)}\n`);
+}
+
+async function runStreamedImport(req, res, rows, headers) {
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("X-Accel-Buffering", "no"); 
+  if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+  try {
+    const result = await processRows(rows, {}, (progress) => {
+      writeEvent(res, { type: "progress", ...progress });
+    });
+
+    writeEvent(res, {
+      type: "done",
+      result: {
+        totalRows: rows.length,
+        totalImported: result.totalImported,
+        totalSkipped: result.totalSkipped,
+        imported: result.imported,
+        skipped: result.skipped,
+        detectedHeaders: headers,
+        batchErrors: result.batchErrors,
+      },
+    });
+  } catch (err) {
+    writeEvent(res, { type: "error", error: err.message });
+  } finally {
+    res.end();
+  }
+}
+
+
 async function importCsv(req, res, next) {
   try {
     if (!req.file) {
@@ -19,20 +49,35 @@ async function importCsv(req, res, next) {
       return res.status(400).json({ error: "The CSV file has no data rows." });
     }
 
-    const result = await processRows(rows);
-
-    return res.status(200).json({
-      totalRows: rows.length,
-      totalImported: result.totalImported,
-      totalSkipped: result.totalSkipped,
-      imported: result.imported,
-      skipped: result.skipped,
-      detectedHeaders: headers,
-      batchErrors: result.batchErrors,
-    });
+    await runStreamedImport(req, res, rows, headers);
   } catch (err) {
-    next(err);
+    if (res.headersSent) {
+      writeEvent(res, { type: "error", error: err.message });
+      res.end();
+    } else {
+      next(err);
+    }
   }
 }
 
-module.exports = { importCsv };
+
+async function retryRows(req, res, next) {
+  try {
+    const rows = req.body?.rows;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "Expected a non-empty 'rows' array." });
+    }
+
+    const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+    await runStreamedImport(req, res, rows, headers);
+  } catch (err) {
+    if (res.headersSent) {
+      writeEvent(res, { type: "error", error: err.message });
+      res.end();
+    } else {
+      next(err);
+    }
+  }
+}
+
+module.exports = { importCsv, retryRows };
