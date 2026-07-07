@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #14181f;
+  --color-surface: #1c222b;
+  --color-surface-raised: #232a35;
+  --color-line: #2a313d;
+  --color-paper: #edeef0;
+  --color-muted: #8b93a1;
+  --color-accent: #e8a33d;
+  --color-accent-dim: #ad7a2d;
+  --color-success: #4fae7c;
+  --color-danger: #e2604f;
+
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-body: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+body {
+  background-color: var(--color-ink);
+  color: var(--color-paper);
+  font-family: var(--font-body);
+}
+
+::selection {
+  background-color: var(--color-accent);
+  color: var(--color-ink);
+}
+
+/* Scrollbar styling for the data tables (horizontal + vertical scroll spec requirement) */
+.data-scroll::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+.data-scroll::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+.data-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 6px;
+}
+.data-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-dim);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
