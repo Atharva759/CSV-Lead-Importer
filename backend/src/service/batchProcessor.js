@@ -1,5 +1,6 @@
 const { extractBatch } = require("./aiExtractor.service");
 const { validateAndCleanRecord } = require("./validator.service");
+const { deduplicateRecords } = require("./dedup.service");
 
 function chunk(array, size) {
   const out = [];
@@ -13,6 +14,9 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Calls extractBatch with retries. Throws only after all retries are exhausted.
+ */
 async function extractBatchWithRetry(rows, maxRetries) {
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -27,7 +31,7 @@ async function extractBatchWithRetry(rows, maxRetries) {
     } catch (err) {
       lastError = err;
       if (attempt < maxRetries) {
-        await sleep(300 * (attempt + 1)); 
+        await sleep(300 * (attempt + 1)); // small backoff before retrying
       }
     }
   }
@@ -35,11 +39,14 @@ async function extractBatchWithRetry(rows, maxRetries) {
 }
 
 /**
- * 
+ * Processes all raw CSV rows: batches them, sends each batch to the AI
+ * extractor (with retry), validates/cleans every returned record, and
+ * separates results into imported vs skipped.
+ *
  * @param {Record<string, string>[]} rawRows
  * @param {{ batchSize?: number, maxRetries?: number }} options
  * @param {(progress: object) => void} [onBatchComplete] - called after each batch, for streaming progress
- * @returns {{ imported: object[], skipped: object[], totalImported: number, totalSkipped: number, batchErrors: object[] }}
+ * @returns {{ imported: object[], skipped: object[], totalImported: number, totalSkipped: number, duplicatesRemoved: number, batchErrors: object[] }}
  */
 async function processRows(rawRows, options = {}, onBatchComplete) {
   const batchSize = options.batchSize || Number(process.env.AI_BATCH_SIZE || 20);
@@ -72,7 +79,8 @@ async function processRows(rawRows, options = {}, onBatchComplete) {
         }
       });
     } catch (err) {
-      
+      // Entire batch failed after retries: skip all its rows, but keep the
+      // original raw data so nothing is silently lost.
       batch.forEach((row) => {
         skipped.push({ row, reason: `AI extraction failed: ${err.message}`, batchIndex });
       });
@@ -99,11 +107,16 @@ async function processRows(rawRows, options = {}, onBatchComplete) {
     }
   }
 
+  // Dedup runs once, on the FULL imported list, after all batches finish —
+  // not per-batch — since a duplicate lead can land in any two batches.
+  const { unique: dedupedImported, duplicatesRemoved } = deduplicateRecords(imported);
+
   return {
-    imported,
+    imported: dedupedImported,
     skipped,
-    totalImported: imported.length,
+    totalImported: dedupedImported.length,
     totalSkipped: skipped.length,
+    duplicatesRemoved,
     batchErrors,
   };
 }
